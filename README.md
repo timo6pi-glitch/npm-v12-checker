@@ -31,7 +31,3 @@ This is a small, free tool, not a company and not a funded product yet — see t
 ## Source / reference
 
 - [npm v12 changelog](https://docs.npmjs.com/cli/v12/using-npm/changelog/)
-
-## Live demo
-
-https://timo6pi-glitch.github.io/npm-v12-checker/
