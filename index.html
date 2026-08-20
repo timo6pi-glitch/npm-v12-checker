@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>npm v12 Install-Script Checker — will your CI break silently?</title>
+<meta name="description" content="Paste your package.json and find out which dependencies rely on install scripts that npm v12 disables by default — before your CI goes green with a broken build.">
+<meta name="keywords" content="npm v12 install scripts, npm v12 ignored scripts, npm v12 lifecycle scripts, npm ci install scripts, npm v12 migration, npm v12 native dependencies">
+<meta property="og:title" content="npm v12 Install-Script Checker — will your CI break silently?">
+<meta property="og:description" content="Paste your package.json and find out which dependencies rely on install scripts that npm v12 disables by default.">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary">
+<style>
+  :root{
+    --bg:#0b0e14; --panel:#121722; --border:#232b3a; --text:#e6e9f0; --muted:#93a0b4;
+    --accent:#ff5f5f; --accent2:#4fd1c5; --ok:#4fd17a; --mono:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;
+  }
+  @media (prefers-color-scheme: light){
+    :root:not([data-theme="dark"]){ --bg:#f7f8fa; --panel:#ffffff; --border:#e2e6ec; --text:#1a2233; --muted:#5b6576; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;line-height:1.5}
+  .wrap{max-width:820px;margin:0 auto;padding:2.5rem 1.25rem 4rem}
+  h1{font-size:1.7rem;line-height:1.25;margin:0 0 .5rem}
+  .lede{color:var(--muted);font-size:1.05rem;margin:0 0 1.75rem}
+  .badge{display:inline-block;background:rgba(255,95,95,.12);color:var(--accent);border:1px solid rgba(255,95,95,.3);border-radius:999px;padding:.15rem .65rem;font-size:.75rem;font-weight:600;letter-spacing:.02em;margin-bottom:1rem}
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:1.5rem;margin-bottom:1.5rem}
+  h2{font-size:1.05rem;margin:0 0 .75rem}
+  textarea{width:100%;min-height:220px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:.85rem;font-family:var(--mono);font-size:.85rem;resize:vertical}
+  .row{display:flex;gap:.75rem;align-items:center;margin-top:.85rem;flex-wrap:wrap}
+  button{background:var(--accent2);color:#04211d;border:none;border-radius:8px;padding:.6rem 1.1rem;font-weight:700;font-size:.9rem;cursor:pointer}
+  button:hover{filter:brightness(1.08)}
+  button.secondary{background:transparent;color:var(--text);border:1px solid var(--border)}
+  input[type=file]{color:var(--muted);font-size:.85rem}
+  .privacy{color:var(--muted);font-size:.8rem;margin-top:.6rem}
+  .result{margin-top:1.25rem}
+  .stat-row{display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem}
+  .stat{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:.75rem 1rem;flex:1;min-width:140px}
+  .stat .n{font-size:1.6rem;font-weight:800}
+  .stat .l{color:var(--muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.04em}
+  .stat.risk .n{color:var(--accent)}
+  .stat.safe .n{color:var(--ok)}
+  table{width:100%;border-collapse:collapse;font-size:.88rem}
+  th,td{text-align:left;padding:.55rem .5rem;border-bottom:1px solid var(--border)}
+  th{color:var(--muted);font-weight:600;font-size:.75rem;text-transform:uppercase;letter-spacing:.03em}
+  td.pkg{font-family:var(--mono);font-weight:700}
+  .empty-ok{color:var(--ok);font-weight:600}
+  .faq{margin-top:2rem}
+  .faq h3{font-size:.95rem;margin:1.25rem 0 .35rem}
+  .faq p{color:var(--muted);margin:0;font-size:.92rem}
+  code{background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:.1rem .35rem;font-family:var(--mono);font-size:.85em}
+  footer{color:var(--muted);font-size:.8rem;margin-top:2.5rem;border-top:1px solid var(--border);padding-top:1.25rem}
+  .cta-block{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:1.25rem 1.5rem;margin-top:1.5rem}
+  .cta-block h2{margin-bottom:.35rem}
+  .cta-block p{color:var(--muted);margin:.25rem 0 1rem;font-size:.92rem}
+  .plans{display:flex;gap:1rem;flex-wrap:wrap}
+  .plan{flex:1;min-width:220px;border:1px solid var(--border);border-radius:10px;padding:1rem}
+  .plan h4{margin:0 0 .35rem;font-size:.95rem}
+  .plan .price{font-size:1.3rem;font-weight:800;margin-bottom:.5rem}
+  .plan ul{margin:0;padding-left:1.1rem;color:var(--muted);font-size:.85rem}
+  .plan.paid{border-color:var(--accent2)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="badge">npm v12 · install scripts disabled by default</span>
+  <h1>Will your CI break silently under npm v12?</h1>
+  <p class="lede">npm v12 disables <code>preinstall</code>/<code>install</code>/<code>postinstall</code> scripts by default. The dangerous part: <code>npm ci</code> doesn't fail — it just skips the script. Projects relying on install scripts (native compilation, prebuilt binary downloads — sharp, bcrypt, canvas, sqlite3...) can build green in CI and only fail later, at runtime or in production. Paste your <code>package.json</code> below to see which of your dependencies are known to rely on an install script and deserve manual verification before you migrate.</p>
+
+  <p style="color:var(--muted);font-size:.85rem;margin:-.75rem 0 1.75rem">
+    Runs entirely in your browser · nothing is uploaded · results are deterministic (same input, same output, every time) ·
+    <a href="https://docs.npmjs.com/cli/v12/using-npm/changelog/" style="color:var(--accent2)">npm v12 changelog ↗</a>
+  </p>
+
+  <div class="panel">
+    <h2>1. Paste or upload your package.json</h2>
+    <textarea id="input" placeholder='{"dependencies": {"sharp": "^0.33.0", ...}}'></textarea>
+    <div class="row">
+      <button id="analyzeBtn">Analyze</button>
+      <button class="secondary" id="loadSample">Load an example</button>
+      <input type="file" id="fileInput" accept="application/json">
+    </div>
+    <p class="privacy">Everything runs in your browser. Your package.json is never uploaded or sent anywhere — this page makes no network requests.</p>
+  </div>
+
+  <div class="panel result" id="resultPanel" style="display:none">
+    <h2>2. Results</h2>
+    <div class="stat-row">
+      <div class="stat"><div class="n" id="scannedN">0</div><div class="l">dependencies scanned</div></div>
+      <div class="stat risk"><div class="n" id="riskN">0</div><div class="l">need verification</div></div>
+    </div>
+    <div id="tableWrap"></div>
+  </div>
+
+  <div class="cta-block">
+    <h2>Want this checked automatically in CI/GitHub Actions?</h2>
+    <p>This page is a free, one-off manual check. A CI integration that re-checks every dependency change automatically — instead of you remembering to paste your package.json here — is a hypothesis, not built yet.</p>
+    <button class="secondary" id="paidIntentBtn">I'd want this in CI →</button>
+    <span id="paidIntentThanks" style="display:none;color:var(--ok);font-size:.85rem;margin-left:.6rem">Noted, thank you — no signup, this just records interest locally.</span>
+  </div>
+
+  <div class="cta-block">
+    <h2>Free vs. full audit</h2>
+    <p>This page checks against a curated list of commonly-affected packages, entirely client-side, for free, no limit.</p>
+    <div class="plans">
+      <div class="plan">
+        <h4>Free — this page</h4>
+        <div class="price">€0</div>
+        <ul>
+          <li>Unlimited manual checks</li>
+          <li>Known native-dependency packages</li>
+          <li>Runs fully in your browser</li>
+        </ul>
+      </div>
+      <div class="plan paid">
+        <h4>Pro — CI check (planned)</h4>
+        <div class="price">Price not yet set</div>
+        <ul>
+          <li>GitHub Action that fails the PR, not just your production</li>
+          <li>Full package-lock.json + transitive dependency scan</li>
+          <li>Alerts when a new dependency introduces install-script risk</li>
+        </ul>
+      </div>
+    </div>
+    <p style="margin-top:.85rem;color:var(--muted);font-size:.82rem">The Pro tier is a hypothesis, not yet built. If you'd want it, the free tool above is the whole product for now.</p>
+  </div>
+
+  <div class="faq">
+    <h3>Why now?</h3>
+    <p>npm v12 shipped July 8, 2026. It's a real, current, silent-failure risk — not a hypothetical one. Existing guides explain the change; this page instead tells you, specifically, whether <em>your</em> project is affected.</p>
+    <h3>What does this check?</h3>
+    <p>It scans your dependencies, devDependencies, and optionalDependencies against a curated list of packages known to rely on install scripts (native compilation, prebuilt binary downloads, etc.) and flags each match with the reason it's at risk.</p>
+    <h3>What it does NOT do</h3>
+    <p>It cannot see your transitive dependencies (packages required by your packages), and a package absent from the list is not proof it's safe — only that we don't have evidence either way. Always verify with <code>npm ci</code> on a real npm v12 environment before shipping.</p>
+  </div>
+
+  <footer>Built by Galaxy OS as a small, free tool — not a company, not a funded product yet. No account required, nothing stored, nothing sent anywhere.</footer>
+</div>
+
+<script>
+const KNOWN = {
+  "sharp": "downloads a prebuilt native binary via postinstall",
+  "bcrypt": "compiles a native addon via node-gyp on install",
+  "canvas": "compiles native bindings (Cairo) via node-gyp on install",
+  "sqlite3": "compiles or downloads a native binding on install",
+  "better-sqlite3": "compiles a native addon via node-gyp on install",
+  "esbuild": "downloads a platform-specific native binary via postinstall",
+  "node-sass": "downloads a prebuilt native binding via postinstall",
+  "fsevents": "compiles a native macOS addon on install",
+  "puppeteer": "downloads a Chromium binary via postinstall",
+  "puppeteer-core": "may download a browser binary via postinstall",
+  "playwright": "downloads browser binaries via postinstall",
+  "playwright-core": "may download browser binaries via postinstall",
+  "cypress": "downloads the Cypress binary via postinstall",
+  "husky": "installs git hooks via a prepare script",
+  "core-js": "historically ran a postinstall donation/setup message script",
+  "electron": "downloads the Electron binary via postinstall",
+  "node-gyp": "runs native build scripts",
+  "node-pty": "compiles a native addon via node-gyp on install",
+  "argon2": "compiles a native addon via node-gyp on install",
+  "grpc-js": "may run native install steps depending on version",
+  "@grpc/grpc-js": "may run native install steps depending on version",
+  "libxmljs2": "compiles native bindings via node-gyp on install",
+  "leveldown": "compiles a native addon via node-gyp on install",
+  "utf-8-validate": "compiles an optional native addon on install",
+  "bufferutil": "compiles an optional native addon on install"
+};
+
+const SAMPLE = {
+  name: "example-app",
+  dependencies: { express: "^4.19.0", sharp: "^0.33.0", "better-sqlite3": "^11.0.0" },
+  devDependencies: { husky: "^9.0.0", vitest: "^2.0.0" }
+};
+
+function analyze(text) {
+  const pkg = JSON.parse(text);
+  if (typeof pkg !== "object" || pkg === null) throw new Error("Invalid package.json: root is not an object.");
+  const deps = Object.assign({}, pkg.dependencies || {}, pkg.devDependencies || {}, pkg.optionalDependencies || {});
+  const names = Object.keys(deps);
+  const findings = [];
+  for (const name of names) {
+    if (KNOWN[name]) findings.push({ name, version: deps[name], reason: KNOWN[name] });
+  }
+  findings.sort((a, b) => a.name.localeCompare(b.name));
+  return { total: names.length, findings };
+}
+
+function render(result) {
+  document.getElementById("resultPanel").style.display = "block";
+  document.getElementById("scannedN").textContent = result.total;
+  document.getElementById("riskN").textContent = result.findings.length;
+  const wrap = document.getElementById("tableWrap");
+  if (result.findings.length === 0) {
+    wrap.innerHTML = '<p class="empty-ok">No known install-script dependencies found in this list. This does not guarantee your project is unaffected — see "What it does NOT do" below.</p>';
+    return;
+  }
+  let html = '<table><thead><tr><th>Package</th><th>Version</th><th>Status</th><th>Known install-script behavior</th></tr></thead><tbody>';
+  for (const f of result.findings) {
+    html += '<tr><td class="pkg">' + escapeHtml(f.name) + '</td><td>' + escapeHtml(f.version) + '</td><td>NEEDS_VERIFICATION</td><td>' + escapeHtml(f.reason) + '</td></tr>';
+  }
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
+document.getElementById("analyzeBtn").addEventListener("click", () => {
+  track("TOOL_STARTED");
+  const text = document.getElementById("input").value.trim();
+  if (!text) { alert("Paste a package.json first."); return; }
+  try {
+    render(analyze(text));
+    track("ANALYSIS_COMPLETED");
+  } catch (e) {
+    alert("Could not parse this as JSON: " + e.message);
+  }
+});
+
+document.getElementById("loadSample").addEventListener("click", () => {
+  document.getElementById("input").value = JSON.stringify(SAMPLE, null, 2);
+});
+
+document.getElementById("fileInput").addEventListener("change", (ev) => {
+  const file = ev.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => { document.getElementById("input").value = reader.result; };
+  reader.readAsText(file);
+});
+
+/**
+ * Zero-infrastructure local funnel counter — exp-npm-v12-checker-001.
+ * Honest limitation: this only counts events in THIS browser (localStorage),
+ * it does NOT aggregate across visitors — no server call is made, nothing
+ * is sent anywhere. Real cross-visitor funnel data requires a backend
+ * (see TRACKING_BLOCKER in the experiment record) that has not been wired
+ * yet because doing so safely requires founder-provided credentials this
+ * page must never embed on its own.
+ */
+const EXPERIMENT_ID = "exp-npm-v12-checker-001";
+function track(event) {
+  try {
+    const key = "galaxy_funnel_" + EXPERIMENT_ID;
+    const counts = JSON.parse(localStorage.getItem(key) || "{}");
+    counts[event] = (counts[event] || 0) + 1;
+    localStorage.setItem(key, JSON.stringify(counts));
+  } catch (e) { /* localStorage unavailable (private mode etc.) — never block the page for this */ }
+}
+track("PAGE_VIEW");
+
+document.getElementById("paidIntentBtn").addEventListener("click", () => {
+  track("PAID_CTA_CLICK");
+  document.getElementById("paidIntentThanks").style.display = "inline";
+});
+</script>
+</body>
+</html>
