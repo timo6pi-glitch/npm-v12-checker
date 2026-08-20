@@ -80,7 +80,7 @@
       <button class="secondary" id="loadSample">Load an example</button>
       <input type="file" id="fileInput" accept="application/json">
     </div>
-    <p class="privacy">Everything runs in your browser. Your package.json is never uploaded or sent anywhere — this page makes no network requests.</p>
+    <p class="privacy">The analysis runs entirely in your browser. Your package.json content is never uploaded or sent anywhere. This page does send anonymous, content-free usage pings (e.g. "analysis completed") to help us learn whether this tool is useful — never your file, never anything you typed.</p>
   </div>
 
   <div class="panel result" id="resultPanel" style="display:none">
@@ -134,7 +134,7 @@
     <p>It cannot see your transitive dependencies (packages required by your packages), and a package absent from the list is not proof it's safe — only that we don't have evidence either way. Always verify with <code>npm ci</code> on a real npm v12 environment before shipping.</p>
   </div>
 
-  <footer>Built by Galaxy OS as a small, free tool — not a company, not a funded product yet. No account required, nothing stored, nothing sent anywhere.</footer>
+  <footer>Built by Galaxy OS as a small, free tool — not a company, not a funded product yet. No account required. Your package.json is never sent anywhere; only anonymous, content-free usage events are.</footer>
 </div>
 
 <script>
@@ -231,15 +231,23 @@ document.getElementById("fileInput").addEventListener("change", (ev) => {
 });
 
 /**
- * Zero-infrastructure local funnel counter — exp-npm-v12-checker-001.
- * Honest limitation: this only counts events in THIS browser (localStorage),
- * it does NOT aggregate across visitors — no server call is made, nothing
- * is sent anywhere. Real cross-visitor funnel data requires a backend
- * (see TRACKING_BLOCKER in the experiment record) that has not been wired
- * yet because doing so safely requires founder-provided credentials this
- * page must never embed on its own.
+ * Funnel tracking — exp-npm-v12-checker-001. Two layers:
+ * 1) A local per-browser counter (localStorage) — always works, never blocks the page.
+ * 2) A real cross-visitor event log, sent to a dedicated Supabase table
+ *    (galaxy_npm_v12_checker_events) via a PUBLISHABLE key — this key is
+ *    designed by Supabase to be safe for client-side use (not the
+ *    service-role key, which is never embedded here or anywhere public).
+ *    Row-level security on that table allows INSERT only, for this exact
+ *    experiment id and a fixed set of event names — it can never be read
+ *    back through this key, so no visitor's data is exposed to any other
+ *    visitor or to the page itself. Only the event name and a timestamp
+ *    are sent — never the pasted/uploaded package.json content, which
+ *    still never leaves the browser.
  */
 const EXPERIMENT_ID = "exp-npm-v12-checker-001";
+const SUPABASE_URL = "https://xlvkdsatkyjfoxigqiyl.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_rhAf3pl81GNYSDtjvDCNrQ_EUa9LPts";
+
 function track(event) {
   try {
     const key = "galaxy_funnel_" + EXPERIMENT_ID;
@@ -247,6 +255,19 @@ function track(event) {
     counts[event] = (counts[event] || 0) + 1;
     localStorage.setItem(key, JSON.stringify(counts));
   } catch (e) { /* localStorage unavailable (private mode etc.) — never block the page for this */ }
+
+  try {
+    fetch(SUPABASE_URL + "/rest/v1/galaxy_npm_v12_checker_events", {
+      method: "POST",
+      headers: {
+        "apikey": SUPABASE_PUBLISHABLE_KEY,
+        "Authorization": "Bearer " + SUPABASE_PUBLISHABLE_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ experiment_id: EXPERIMENT_ID, event_type: event }),
+      keepalive: true,
+    }).catch(() => {}); // best-effort only — a failed ping never blocks or errors the page for the visitor.
+  } catch (e) { /* fetch unavailable in some very old browser — never block the page for this */ }
 }
 track("PAGE_VIEW");
 

@@ -18,7 +18,7 @@ Open the live demo, paste or upload your `package.json`, and click Analyze. You'
 
 ## Privacy
 
-Everything runs in your browser. Your `package.json` is never uploaded or sent anywhere — this page makes no network requests. You can verify this yourself: view source, it's a single unminified HTML file.
+The analysis runs entirely in your browser — your `package.json` content is never uploaded or sent anywhere. The page does send anonymous, content-free usage pings (e.g. "analysis completed") to a write-only, no-read-back database, to help us learn whether the tool is useful. You can verify this yourself: view source, it's a single unminified HTML file, and the analysis logic never touches the network.
 
 ## Limitations
 
