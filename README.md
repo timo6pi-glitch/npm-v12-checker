@@ -2,6 +2,8 @@
 
 A free, client-side tool: paste your `package.json`, find out which of your dependencies are known to rely on an npm install script — before npm v12 silently skips it on you.
 
+**Live demo: https://timo6pi-glitch.github.io/npm-v12-checker/**
+
 ## What changed
 
 npm v12 (shipped 2026-07-08) disables `preinstall`/`install`/`postinstall` scripts by default, as a response to real supply-chain attacks that abused them. The part that's easy to miss: `npm ci` does not fail when a script is blocked — it silently skips it and exits 0. If a dependency needs its install script to actually work (compiling a native addon, downloading a prebuilt binary), your CI can stay green while that dependency is quietly broken.
@@ -32,4 +34,4 @@ This is a small, free tool, not a company and not a funded product yet — see t
 
 ## Live demo
 
-`<PUBLIC_URL_PLACEHOLDER>`
+https://timo6pi-glitch.github.io/npm-v12-checker/
